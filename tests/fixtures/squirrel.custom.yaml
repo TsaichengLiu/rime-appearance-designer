@@ -1,0 +1,19 @@
+# 測試用的用戶配置:自訂一套深色方案,方案裏還混着舊式寫法的樣式鍵
+patch:
+  "style/color_scheme": night_owl
+  "preset_color_schemes/night_owl":
+    name: 夜梟／Night Owl
+    author: 測試
+    candidate_list_layout: linear
+    horizontal: true
+    font_face: "Helvetica Neue,PingFang TC"
+    font_point: 20
+    label_font_point: 16
+    corner_radius: 10
+    back_color: 0x2b1f1a
+    candidate_text_color: 0xF5EFEA
+    comment_text_color: 0x7FFFFFFF
+    label_color: 0xAAB4BB
+    hilited_candidate_back_color: 0x9A6B3C
+    hilited_candidate_text_color: 0xFFFFFF
+    text_color: 0x7FFFFFFF

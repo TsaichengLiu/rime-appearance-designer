@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#4A33A8"/>
+      <stop offset="0.55" stop-color="#8E3FD0"/>
+      <stop offset="1" stop-color="#FF6FB1"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.28"/>
+      <stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="hi" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF5CB8"/>
+      <stop offset="1" stop-color="#FF8D5C"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity="0.36"/>
+    </filter>
+    <filter id="sh2" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#1B0A4A" flood-opacity="0.42"/>
+    </filter>
+    <filter id="sh3" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#1B0A4A" flood-opacity="0.35"/>
+    </filter>
+    <clipPath id="body"><rect x="100" y="100" width="824" height="824" rx="188"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="188" fill="url(#bg)" filter="url(#sh)"/>
+  <g clip-path="url(#body)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#gloss)"/>
+    <circle cx="880" cy="170" r="260" fill="#fff" opacity="0.07"/>
+  </g>
+  <!-- 預編輯(拼音串)-->
+  <rect x="196" y="236" width="236" height="34" rx="17" fill="#fff" opacity="0.9"/>
+  <rect x="196" y="284" width="236" height="8" rx="4" fill="#7FF3FF"/>
+  <rect x="446" y="232" width="8" height="64" rx="4" fill="#fff" opacity="0.9"/>
+  <!-- 候選面板 -->
+  <rect x="168" y="332" width="688" height="262" rx="76" fill="#FBF8FF" filter="url(#sh2)"/>
+  <rect x="198" y="362" width="258" height="202" rx="54" fill="url(#hi)"/>
+  <rect x="230" y="422" width="40" height="30" rx="15" fill="#fff" opacity="0.7"/>
+  <rect x="286" y="414" width="136" height="46" rx="23" fill="#fff"/>
+  <rect x="230" y="478" width="192" height="12" rx="6" fill="#fff" opacity="0.45"/>
+  <rect x="496" y="430" width="150" height="40" rx="20" fill="#CDBDEB"/>
+  <rect x="676" y="430" width="136" height="40" rx="20" fill="#E0D6F3"/>
+  <!-- 色板 -->
+  <g filter="url(#sh3)">
+    <circle cx="256" cy="738" r="40" fill="#FF77D4"/>
+    <circle cx="384" cy="738" r="40" fill="#FFC72C"/>
+    <circle cx="512" cy="738" r="40" fill="#52D8AE"/>
+    <circle cx="640" cy="738" r="40" fill="#4FC3FF"/>
+    <circle cx="768" cy="738" r="40" fill="#FFFFFF"/>
+  </g>
+  <circle cx="768" cy="738" r="40" fill="none" stroke="#FF77D4" stroke-width="7" opacity="0.0"/>
+</svg>

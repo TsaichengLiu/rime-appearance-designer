@@ -1,0 +1,11 @@
+# 構建產物(python3 build.py 生成)
+dist/
+app/Contents/Resources/index.html
+app/Contents/Resources/server.pl
+app/Contents/Resources/window.js
+app/Contents/Resources/window.m
+# 系統與編輯器
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/

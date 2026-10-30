@@ -1,0 +1,5 @@
+patch:
+  "menu/page_size": 7
+  "menu/alternative_select_labels": [ 〡, 〢, 〣, 〤, 〥, 〦, 〧 ]
+  schema_list:
+    - schema: luna_pinyin

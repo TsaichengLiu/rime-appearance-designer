@@ -1,0 +1,204 @@
+#!/bin/bash
+# Rime 外觀設計器 · 啟動器
+# 1) 啟動本地服務(macOS 自帶 Perl)
+# 2) 打開自有的獨立窗口(原生 WKWebView),按順序嘗試:
+#      objc  編譯版:本機有 Xcode 命令行工具時,首次運行把 window.m 編譯成小程序並緩存
+#      jxa   腳本版:不用編譯,macOS 自帶的 osascript(JavaScript)直接創建窗口
+#    哪個成功就記住,下次優先用它。不使用任何第三方瀏覽器;
+#    兩個都失敗時:寫一份診斷文件、彈窗說明,是否改用默認瀏覽器由用戶自己決定。
+SYSCTL="${RIME_UI_SYSCTL:-/usr/sbin/sysctl}"
+ARCHCMD="${RIME_UI_ARCHCMD:-/usr/bin/arch}"
+# Apple 晶片:macOS 會把「主程序是腳本」的 app 誤判成 Intel 應用,用 Rosetta 轉譯運行(macOS 26.4 起還會彈
+# 「不支持 Apple 晶片 / Intel 應用即將停止支持」的提示)。發現自己正被轉譯時,改用原生 arm64 重新執行自己,
+# 這樣後面的 Perl、編譯器和窗口程序全都是原生的。
+if [ -z "$RIME_UI_NATIVE" ] && [ "$("$SYSCTL" -in sysctl.proc_translated 2>/dev/null)" = "1" ] \
+   && "$ARCHCMD" -arm64 /usr/bin/true 2>/dev/null; then
+  export RIME_UI_NATIVE=1
+  exec "$ARCHCMD" -arm64 /bin/bash "$0" "$@"
+fi
+APP="$(cd "$(dirname "$0")/../.." && pwd)"
+RES="$APP/Contents/Resources"
+STATE="${RIME_UI_STATE:-$HOME/Library/Application Support/RimeAppearanceDesigner}"
+LOG="$STATE/server.log"
+WLOG="$STATE/window.log"
+PERL="${RIME_UI_PERL:-/usr/bin/perl}"
+OSA="${RIME_UI_OSASCRIPT:-/usr/bin/osascript}"
+OPEN="${RIME_UI_OPEN:-/usr/bin/open}"
+XCSELECT="${RIME_UI_XCSELECT:-/usr/bin/xcode-select}"
+CLANG="${RIME_UI_CLANG:-/usr/bin/clang}"
+WAIT="${RIME_UI_WAIT:-12}"                    # 每種窗口方案等待頁面第一次心跳的秒數
+DIAG_DIR="${RIME_UI_DIAG_DIR:-$(dirname "$APP")}"
+TITLE="Rime 外觀設計器"
+ICON="$RES/AppIcon.icns"
+BIN="$STATE/RimeUIWindow"
+mkdir -p "$STATE/backups"
+rm -f "$STATE/use-browser"                    # 舊版本留下的「用瀏覽器打開」標誌,已不再使用
+
+stamp() { date '+%F %T'; }
+wlog() { echo "[$(stamp)] $*" >>"$WLOG"; }
+alert() {
+  "$OSA" -e "display dialog \"$1\" buttons {\"好\"} default button 1 with icon caution with title \"$TITLE\"" >/dev/null 2>&1
+}
+mtime() { "$PERL" -e 'print((stat shift)[9] // 0)' "$1"; }
+now() { "$PERL" -e 'print time'; }
+wait_ping() {    # wait_ping <秒數> [要監視的進程 PID]:等頁面發出第一次心跳
+  local n=$(( $1 * 10 )) i
+  for ((i = 0; i < n; i++)); do
+    [ -e "$STATE/ping" ] && return 0
+    [ -n "$2" ] && ! kill -0 "$2" 2>/dev/null && return 1
+    sleep 0.1
+  done
+  return 1
+}
+quit_server() { /usr/bin/curl -s -m 2 -X POST -H "X-Token: $TOKEN" "http://127.0.0.1:$PORT/api/quit" >/dev/null 2>&1; }
+
+# ---- 已有實例在運行 ----
+if [ -s "$STATE/instance" ]; then
+  read -r PORT TOKEN PID < "$STATE/instance"
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+    if [ -e "$STATE/ping" ] && [ $(( $(now) - $(mtime "$STATE/ping") )) -le 20 ]; then
+      exit 0    # 界面還開着,沒必要再開一個
+    fi
+    kill "$PID" 2>/dev/null; sleep 0.5    # 服務還在但界面已關(等待超時中):重啟乾淨的
+  fi
+  rm -f "$STATE/instance"
+fi
+
+if [ ! -d "$HOME/Library/Rime" ]; then
+  alert "找不到 ~/Library/Rime 目錄。請先安裝並用過一次鼠鬚管,再打開本工具。"
+  exit 1
+fi
+if [ ! -x "$PERL" ] || ! "$PERL" -MIO::Socket::INET -MIO::Select -MJSON::PP -MEncode -MPOSIX -MTime::HiRes -MFile::Temp -MFcntl -MDigest::MD5 -e1 2>/dev/null; then
+  alert "本機缺少系統自帶的 Perl 環境,無法啟動。請把這個提示截圖發給製作者。"
+  exit 1
+fi
+
+RIME_UI_DAEMON=1 "$PERL" "$RES/server.pl" "$STATE" "$RES/index.html" >>"$LOG" 2>&1
+for _ in $(seq 1 60); do [ -s "$STATE/instance" ] && break; sleep 0.1; done
+if [ ! -s "$STATE/instance" ]; then
+  alert "本地服務啟動失敗。日誌在:$LOG"
+  exit 1
+fi
+read -r PORT TOKEN SPID < "$STATE/instance"
+URL="http://127.0.0.1:$PORT/?t=$TOKEN"
+
+# ---- 方案 A:編譯版(需要 Xcode 命令行工具;只編譯一次) ----
+CLT_DEV=""
+clt_dir() {    # 命令行工具存在時輸出它的目錄。先確認再調 clang,避免 macOS 彈出「安裝命令行工具」的提示
+  local d
+  d="$("$XCSELECT" -p 2>/dev/null)" || return 1
+  [ -n "$d" ] && [ -x "$d/usr/bin/clang" ] || return 1
+  printf '%s' "$d"
+}
+# 本機原生架構:Apple 晶片上即使當前進程被轉譯,hw.optional.arm64 也是 1
+native_arch() {
+  if [ "$("$SYSCTL" -in hw.optional.arm64 2>/dev/null)" = "1" ]; then echo arm64; else uname -m; fi
+}
+ensure_objc() {    # 成功時輸出可執行文件路徑
+  local want have dev tmp arch
+  arch="$(native_arch)"
+  # 緩存校驗 = 源碼摘要 + 架構:舊版本在 Rosetta 下編譯出的 Intel 版窗口程序會被自動重新編譯成原生版
+  want="$("$PERL" -MDigest::MD5=md5_hex -e 'local $/; open(F, "<", shift) or exit 1; binmode F; print md5_hex(<F>)' "$RES/window.m") $arch" || return 1
+  have="$(cat "$STATE/RimeUIWindow.sum" 2>/dev/null)"
+  if [ -x "$BIN" ] && [ "$have" = "$want" ]; then printf '%s' "$BIN"; return 0; fi
+  dev="$(clt_dir)" || { wlog "objc: 本機沒有 Xcode 命令行工具,跳過編譯版"; return 1; }
+  if [ "$(cat "$STATE/objc-failed" 2>/dev/null)" = "$want $dev" ]; then
+    wlog "objc: 同一份源碼在同一套工具上編譯失敗過(見 compile.log),跳過"; return 1
+  fi
+  wlog "objc: 開始編譯($arch,首次運行需要幾秒)"
+  tmp="$BIN.tmp.$$"
+  rm -f "$tmp"
+  if "$PERL" -e 'alarm 90; exec @ARGV or die "exec: $!"' "$CLANG" -arch "$arch" -fobjc-arc -O1 -framework Cocoa -framework WebKit "$RES/window.m" -o "$tmp" >"$STATE/compile.log" 2>&1 && [ -s "$tmp" ]; then
+    chmod 755 "$tmp"; mv -f "$tmp" "$BIN"
+    printf '%s' "$want" >"$STATE/RimeUIWindow.sum"; rm -f "$STATE/objc-failed"
+    wlog "objc: 編譯完成"
+    printf '%s' "$BIN"; return 0
+  fi
+  rm -f "$tmp"; printf '%s' "$want $dev" >"$STATE/objc-failed"
+  wlog "objc: 編譯失敗(見 compile.log)"
+  return 1
+}
+
+# ---- 嘗試一種窗口方案;成功則返回 0 並把窗口進程號放在 WPID ----
+try_window() {
+  local s="$1" bin
+  rm -f "$STATE/ping"
+  case "$s" in
+    objc)
+      bin="$(ensure_objc)" || return 1
+      "$bin" "$URL" "$ICON" "$TITLE" >>"$WLOG" 2>&1 &
+      ;;
+    jxa)
+      "$OSA" -l JavaScript "$RES/window.js" "$URL" "$ICON" "$TITLE" >>"$WLOG" 2>&1 &
+      ;;
+    *) return 1 ;;
+  esac
+  WPID=$!
+  if wait_ping "$WAIT" "$WPID"; then
+    echo "$s" >"$STATE/strategy"
+    wlog "$s: 窗口已打開"
+    return 0
+  fi
+  if kill -0 "$WPID" 2>/dev/null; then
+    wlog "$s: ${WAIT} 秒內頁面沒有加載,結束該窗口"
+    kill "$WPID" 2>/dev/null; sleep 0.3; kill -9 "$WPID" 2>/dev/null
+  else
+    wlog "$s: 窗口進程已退出,頁面沒有加載"
+  fi
+  return 1
+}
+
+ORDER="objc jxa"
+[ "$(cat "$STATE/strategy" 2>/dev/null)" = "jxa" ] && ORDER="jxa objc"
+OK=""
+for S in $ORDER; do
+  if try_window "$S"; then OK="$S"; break; fi
+done
+
+if [ -n "$OK" ]; then
+  # 窗口正常。守在這裏直到窗口關閉(或服務被界面裏的「退出」按鈕關掉)
+  while kill -0 "$WPID" 2>/dev/null; do
+    kill -0 "$SPID" 2>/dev/null || { kill "$WPID" 2>/dev/null; break; }
+    sleep 1
+  done
+  quit_server
+  exit 0
+fi
+
+# ---- 全部失敗:寫診斷文件,讓用戶決定下一步(不會自動打開任何瀏覽器) ----
+DIAG="$DIAG_DIR/Rime外觀設計器-診斷.txt"
+{ : >"$DIAG"; } 2>/dev/null || DIAG="$STATE/diag.txt"
+mask() { sed -E 's/t=[A-Za-z0-9]+/t=***/g'; }
+{
+  echo "Rime 外觀設計器 · 診斷信息($(stamp))"
+  echo "應用位置: $APP"
+  echo "系統: $(/usr/bin/sw_vers 2>/dev/null | tr '\n' ' ')  架構: $(uname -m)(本機 $(native_arch),轉譯: $("$SYSCTL" -in sysctl.proc_translated 2>/dev/null || echo -))"
+  echo "xcode-select -p: $("$XCSELECT" -p 2>&1 | head -1)"
+  echo "clang 是否可用: $([ -n "$(clt_dir)" ] && echo 是 || echo 否)"
+  echo "嘗試順序: $ORDER"
+  echo
+  echo "===== window.log(最後 80 行)====="; tail -n 80 "$WLOG" 2>/dev/null | mask
+  echo; echo "===== compile.log ====="; tail -n 40 "$STATE/compile.log" 2>/dev/null | mask
+  echo; echo "===== server.log(最後 40 行)====="; tail -n 40 "$LOG" 2>/dev/null | mask
+} >"$DIAG" 2>&1
+wlog "全部窗口方案失敗,診斷文件:$DIAG"
+
+BTNS='{"用瀏覽器打開", "關閉"}'
+INSTALL=""
+if ! clt_dir >/dev/null; then
+  BTNS='{"安裝命令行工具", "用瀏覽器打開", "關閉"}'
+  INSTALL=1
+fi
+MSG="獨立窗口沒能打開。\\n\\n診斷信息已存到:\\n$DIAG\\n\\n把這個文件發給製作者即可定位原因。"
+[ -n "$INSTALL" ] && MSG="$MSG\\n(本機沒有 Xcode 命令行工具;安裝後會用更穩的原生窗口。)"
+CHOICE="$("$OSA" -e "button returned of (display dialog \"$MSG\" buttons $BTNS default button \"關閉\" with icon caution with title \"$TITLE\")" 2>/dev/null)"
+case "$CHOICE" in
+  "用瀏覽器打開")
+    "$OPEN" "$URL"       # 只在用戶明確點了這個按鈕時才用默認瀏覽器;服務會在關閉頁面後自動退出
+    exit 0 ;;
+  "安裝命令行工具")
+    "$XCSELECT" --install >/dev/null 2>&1
+    quit_server; exit 1 ;;
+  *)
+    quit_server; exit 1 ;;
+esac

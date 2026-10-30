@@ -1,0 +1,36 @@
+# 測試用的「已合併內置配置」(相當於 ~/Library/Rime/build/squirrel.yaml 的一小部分)
+style:
+  color_scheme: native
+  candidate_list_layout: stacked
+  text_orientation: horizontal
+  inline_preedit: true
+  corner_radius: 7
+  border_height: -2
+  border_width: -2
+  font_point: 16
+  candidate_format: "[label]. [candidate] [comment]"
+preset_color_schemes:
+  native:
+    name: 系統配色
+  aqua:
+    name: 碧水／Aqua
+    author: 佛振 <chen.sst@gmail.com>
+    back_color: 0xeeffffff
+    border_color: 0xE0B693
+    text_color: 0x606060
+    hilited_text_color: 0x000000
+    candidate_text_color: 0x000000
+    hilited_candidate_text_color: 0xffffff
+    hilited_candidate_back_color: 0xE0B693
+    label_color: 0x888888
+  luna:
+    name: 明月／Luna
+    author: 佛振 <chen.sst@gmail.com>
+    back_color: 0xdd000000
+    border_color: 0x000000
+    text_color: 0x777777
+    hilited_text_color: 0xffffff
+    candidate_text_color: 0xffffff
+    hilited_candidate_text_color: 0x000000
+    hilited_candidate_back_color: 0xcc00ffff
+    font_point: 18
